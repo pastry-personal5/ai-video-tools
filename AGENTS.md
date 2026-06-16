@@ -4,23 +4,40 @@ Guidance for agents and AI assistants working in this repository.
 
 ## Project Purpose
 
-This repository collects AI video tools and related notes. Keep additions easy to scan, current, and useful for someone evaluating or comparing tools.
+This repository collects practical AI video utilities, command notes, and comparison material. Keep additions easy to scan, current, and useful for someone evaluating, running, or adapting the tools.
+
+## Current Shape
+
+- Root documentation lives in Markdown files.
+- Python video utilities currently live at the repository root.
+- `README.md` is the high-level entry point and should stay useful to a first-time reader.
+- Helper modules such as `video_scale.py` and `video_concat.py` hold reusable logic; wrapper scripts should stay thin.
 
 ## Working Guidelines
 
-- Preserve user changes. Check `git status` before editing and do not revert work you did not create.
 - Keep edits focused on the requested task. Avoid broad restructures unless they are necessary.
 - Prefer clear Markdown with descriptive headings, short paragraphs, and practical links or examples.
 - Use ASCII by default unless the surrounding file already uses another character set or the content requires it.
-- When adding tool information, include enough context to make it actionable: tool name, purpose, relevant links, pricing or access notes when known, and date-sensitive caveats where appropriate.
+- When adding external tool information, include enough context to make it actionable: tool name, purpose, relevant links, pricing or access notes when known, platform constraints, and date-sensitive caveats where appropriate.
+- If the request involves current AI products, pricing, model availability, or hosted services, verify the details before writing them down and include the date when the information may age quickly.
+- Keep generated media, temporary concat lists, cache folders, and large outputs out of documentation changes unless the user explicitly asks to track them.
+- Prefer examples that use relative paths or placeholders over machine-specific absolute paths, unless documenting a local troubleshooting case.
+
+## Code Guidelines
+
+- Keep CLI scripts small: parse arguments, resolve paths, call shared functions.
+- Put shared behavior in helper modules and keep argument names consistent across related scripts.
+- For video processing commands, expose `--dry-run` when practical so users can inspect the generated `ffmpeg` or upscaler command before running it.
+- Preserve output quality defaults unless the task is specifically about speed, file size, or compatibility.
 
 ## Verification
 
 - For documentation-only changes, review the rendered Markdown mentally for heading order, broken formatting, and stale placeholders.
-- If code, scripts, or generated data are added later, document how to run or verify them in the same change.
+- For CLI changes, run the relevant `--help` command and at least one `--dry-run` example when possible.
+- If code, scripts, or generated data are added, document how to run or verify them in the same change.
 
 ## Repository Conventions
 
-- Root documentation lives in Markdown files.
-- Keep `README.md` as the high-level entry point.
 - Use this file for AI-agent instructions and contributor workflow notes.
+- Keep README examples copy-pasteable and aligned with the actual CLI options.
+- Do not rename scripts casually; several commands may be referenced from notes or shell history.

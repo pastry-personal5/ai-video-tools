@@ -1,4 +1,174 @@
 # AI Video Tools
 
-## Objectives
-To collect AI video tools.
+Small command-line tools and notes for working with AI-generated video assets. The current scripts focus on resizing, upscaling, frame-rate conversion, and concatenating clips with predictable `ffmpeg`-based workflows.
+
+## Tool Inventory
+
+| Script | Purpose | Best for |
+| --- | --- | --- |
+| `scale_video_ffmpeg.py` | Resize or pad/crop video with `ffmpeg`. | Fast format cleanup, resolution changes, 16fps to 30fps conversion. |
+| `upscale_video_fx.py` | Run `fx-upscale`, then normalize the result with `ffmpeg`. | AI upscaling when `fx-upscale` gives the preferred visual result. |
+| `upscale_video_realesrgan.py` | Extract frames, run Real-ESRGAN, then encode video. | Frame-based AI upscaling with a chosen Real-ESRGAN model. |
+| `concatenate_videos.py` | Join multiple clips by stream copy or re-encoding. | Combining generated clips into a single deliverable. |
+
+## Requirements
+
+- Python 3.14 or newer, based on `pyproject.toml`.
+- `ffmpeg` and `ffprobe` available on `PATH`.
+- `fx-upscale` on `PATH` for `upscale_video_fx.py`.
+- `realesrgan-ncnn-vulkan` on `PATH` for `upscale_video_realesrgan.py`.
+
+The project has no declared Python package dependencies. You can run scripts directly with `python` or through `uv run`.
+
+```sh
+python scale_video_ffmpeg.py --help
+uv run concatenate_videos.py --help
+```
+
+## Video Scaling
+
+Use `scale_video_ffmpeg.py` when the input only needs resizing, padding, cropping, or frame-rate normalization.
+
+Resize to an exact width and height:
+
+```sh
+python scale_video_ffmpeg.py input.mp4 output.mp4 --size 1920x1080
+```
+
+Resize by one dimension while preserving aspect ratio:
+
+```sh
+python scale_video_ffmpeg.py input.mp4 output.mp4 --width 1920
+python scale_video_ffmpeg.py input.mp4 output.mp4 --height 1080
+```
+
+Choose how the source fits the target:
+
+```sh
+python scale_video_ffmpeg.py input.mp4 output.mp4 --size 1920x1080 --mode fit
+python scale_video_ffmpeg.py input.mp4 output.mp4 --size 1920x1080 --mode fill
+```
+
+The default `exact` mode stretches to the target size. `fit` pads inside the target canvas, and `fill` crops after preserving aspect ratio.
+
+The output frame rate defaults to 30fps. By default the scripts use `ffmpeg` motion interpolation through `minterpolate` instead of simply duplicating frames:
+
+```sh
+python scale_video_ffmpeg.py input-16fps.mp4 output-30fps.mp4 --height 1080 --fps 30
+```
+
+Use `--fps-method duplicate` if you want faster conversion with repeated/dropped frames instead of interpolated motion.
+
+Default encode settings are `libx264`, CRF 16, the `slow` preset, copied audio, motion-interpolated 30fps output, and high-quality `ffmpeg` scaling flags. Increase `--crf` for smaller files, lower it for higher quality, or pass `--scale-flags ""` to use `ffmpeg` scaler defaults.
+
+Preview the generated command without writing output:
+
+```sh
+python scale_video_ffmpeg.py input.mp4 output.mp4 --height 1080 --dry-run
+```
+
+## AI Upscaling
+
+Use the upscaling wrappers when a plain resize is not enough. Both wrappers do AI upscaling first, then run a final `ffmpeg` pass so sizing, audio, codec, and frame-rate behavior match the scaling tool.
+
+### fx-upscale
+
+Upscale video with `fx-upscale`, then resize/remux with `ffmpeg`:
+
+```sh
+python upscale_video_fx.py input.mp4 output.mp4 --height 1080
+```
+
+Choose the intermediate `fx-upscale` codec when needed:
+
+```sh
+python upscale_video_fx.py input.mp4 output.mp4 --height 1080 --fx-codec h264
+```
+
+Use `--keep-temp` to preserve the temporary working directory for debugging.
+
+### Real-ESRGAN
+
+Upscale video with Real-ESRGAN, then resize/remux with `ffmpeg`:
+
+```sh
+python upscale_video_realesrgan.py input.mp4 output.mp4 --height 1080
+```
+
+The Real-ESRGAN workflow extracts PNG frames to a temporary directory, runs Real-ESRGAN on those frames, then encodes the finished video with the same output sizing, frame-rate, audio, and codec options used by the other scaling scripts.
+
+Specify a custom model folder when your model files are not in the executable's default model directory:
+
+```sh
+python upscale_video_realesrgan.py input.mp4 output.mp4 --height 1080 --realesrgan-model-folder /path/to/models
+```
+
+Choose a specific model or intermediate scale when needed:
+
+```sh
+python upscale_video_realesrgan.py input.mp4 output.mp4 --height 1080 --realesrgan-model realesr-animevideov3 --realesrgan-scale 4
+```
+
+Use `--keep-temp` to preserve the temporary frame directories for debugging.
+
+## Video Concatenation
+
+Use `concatenate_videos.py` to join generated clips.
+
+Stream-copy matching inputs without re-encoding:
+
+```sh
+python concatenate_videos.py clip-1.mp4 clip-2.mp4 clip-3.mp4 -o combined.mp4
+```
+
+Re-encode when inputs do not match:
+
+```sh
+python concatenate_videos.py clip-1.mp4 clip-2.mp4 -o combined.mp4 --method reencode
+```
+
+Reverse the input order without rewriting the command:
+
+```sh
+python concatenate_videos.py clip-1.mp4 clip-2.mp4 clip-3.mp4 -o combined.mp4 --reverse
+```
+
+For long path lists, put one path per line in a text file:
+
+```text
+clip-1.mov
+clip-2.mov
+clip-3.mov
+```
+
+Then concatenate the list:
+
+```sh
+uv run concatenate_videos.py --inputs-file list.txt --reverse -o combined.mov
+```
+
+The default `copy` method preserves original encoded streams. If the inputs are ProRes `.mov` files, use a `.mov` output for stream-copy concatenation. Use `--method reencode` when you specifically need an H.264 `.mp4`; it is more compatible but creates a new encode using the same CRF 16 and `slow` preset defaults as the scaling tools.
+
+## Common Options
+
+- `--size WIDTHxHEIGHT`: exact target dimensions.
+- `--width WIDTH` or `--height HEIGHT`: preserve source aspect ratio.
+- `--mode exact|fit|fill`: stretch, pad, or crop to the target.
+- `--fps FPS`: output frame rate, defaulting to 30.
+- `--fps-method mci|duplicate`: motion interpolation or repeated/dropped frames.
+- `--video-codec`, `--crf`, `--preset`: final video encode settings.
+- `--audio`: audio handling for scaling/upscaling, usually `copy` or `aac`.
+- `--dry-run`: print generated commands without running them.
+
+## Shell Notes
+
+If you split a shell command across multiple lines, every continued line must end with `\`:
+
+```sh
+uv run concatenate_videos.py --reverse \
+  clip-1.mov \
+  clip-2.mov \
+  -o combined.mov
+```
+
+If `copy` concatenation fails, inspect the inputs with `ffprobe` or rerun with `--method reencode`.
