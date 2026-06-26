@@ -30,6 +30,7 @@ def main() -> None:
         video_codec=args.video_codec,
         crf=args.crf,
         preset=args.preset,
+        pixel_format=args.pixel_format or None,
         audio=args.audio,
         scale_flags=args.scale_flags,
         output_fps=args.output_fps,

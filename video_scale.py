@@ -16,11 +16,17 @@ class VideoInfo:
     width: int
     height: int
     fps: Fraction
+    pix_fmt: str | None = None
+    color_range: str | None = None
+    color_space: str | None = None
+    color_transfer: str | None = None
+    color_primaries: str | None = None
 
 
-DEFAULT_CRF = 16
-DEFAULT_PRESET = "slow"
-DEFAULT_SCALE_FLAGS = "lanczos+accurate_rnd+full_chroma_int"
+DEFAULT_CRF = 10
+DEFAULT_PRESET = "veryslow"
+DEFAULT_PIXEL_FORMAT = "yuv444p"
+DEFAULT_SCALE_FLAGS = "lanczos+accurate_rnd+full_chroma_inp+full_chroma_int"
 DEFAULT_OUTPUT_FPS = Fraction(30, 1)
 DEFAULT_FPS_METHOD = "mci"
 
@@ -83,7 +89,7 @@ def probe_video(input_path: Path, *, ffprobe: str = "ffprobe") -> VideoInfo:
         "-select_streams",
         "v:0",
         "-show_entries",
-        "stream=width,height,avg_frame_rate",
+        "stream=width,height,avg_frame_rate,pix_fmt,color_range,color_space,color_transfer,color_primaries",
         "-of",
         "json",
         str(input_path),
@@ -104,7 +110,18 @@ def probe_video(input_path: Path, *, ffprobe: str = "ffprobe") -> VideoInfo:
         width=int(stream["width"]),
         height=int(stream["height"]),
         fps=fps,
+        pix_fmt=known_stream_value(stream.get("pix_fmt")),
+        color_range=known_stream_value(stream.get("color_range")),
+        color_space=known_stream_value(stream.get("color_space")),
+        color_transfer=known_stream_value(stream.get("color_transfer")),
+        color_primaries=known_stream_value(stream.get("color_primaries")),
     )
+
+
+def known_stream_value(value: object) -> str | None:
+    if not isinstance(value, str) or value in {"", "unknown", "unspecified", "reserved"}:
+        return None
+    return value
 
 
 def even(value: int) -> int:
@@ -151,6 +168,12 @@ def ffmpeg_fps_filter(output_fps: Fraction | None, fps_method: str) -> str:
     raise ValueError(f"Unknown fps method: {fps_method}")
 
 
+def effective_output_fps(source_fps: Fraction, output_fps: Fraction | None) -> Fraction | None:
+    if output_fps is None or fps_matches(source_fps, output_fps):
+        return None
+    return output_fps
+
+
 def ffmpeg_output_fps_args(output_fps: Fraction | None) -> list[str]:
     if output_fps is None:
         return []
@@ -161,6 +184,41 @@ def fps_matches(actual: Fraction, expected: Fraction, *, tolerance: Fraction = F
     return abs(actual - expected) <= tolerance
 
 
+def ffmpeg_color_args(source: VideoInfo) -> list[str]:
+    args: list[str] = []
+    if source.color_range:
+        args.extend(["-color_range", source.color_range])
+    if source.color_space:
+        args.extend(["-colorspace", source.color_space])
+    if source.color_transfer:
+        args.extend(["-color_trc", source.color_transfer])
+    if source.color_primaries:
+        args.extend(["-color_primaries", source.color_primaries])
+    return args
+
+
+def ffmpeg_quality_args(
+    *,
+    video_codec: str,
+    crf: int,
+    preset: str,
+    pixel_format: str | None,
+    source: VideoInfo,
+) -> list[str]:
+    args = [
+        "-c:v",
+        video_codec,
+        "-crf",
+        str(crf),
+        "-preset",
+        preset,
+    ]
+    if pixel_format:
+        args.extend(["-pix_fmt", pixel_format])
+    args.extend(ffmpeg_color_args(source))
+    return args
+
+
 def ensure_output_fps(
     output_path: Path,
     *,
@@ -169,6 +227,7 @@ def ensure_output_fps(
     video_codec: str,
     crf: int,
     preset: str,
+    pixel_format: str | None,
     audio: str,
     ffmpeg: str,
     ffprobe: str,
@@ -190,12 +249,13 @@ def ensure_output_fps(
             "-vf",
             ffmpeg_fps_filter(output_fps, fps_method).removeprefix(","),
             *ffmpeg_output_fps_args(output_fps),
-            "-c:v",
-            video_codec,
-            "-crf",
-            str(crf),
-            "-preset",
-            preset,
+            *ffmpeg_quality_args(
+                video_codec=video_codec,
+                crf=crf,
+                preset=preset,
+                pixel_format=pixel_format,
+                source=probe_video(output_path, ffprobe=ffprobe),
+            ),
             "-c:a",
             audio,
             str(corrected),
@@ -262,6 +322,7 @@ def build_ffmpeg_scale_command(
     video_codec: str = "libx264",
     crf: int = DEFAULT_CRF,
     preset: str = DEFAULT_PRESET,
+    pixel_format: str | None = DEFAULT_PIXEL_FORMAT,
     audio: str = "copy",
     scale_flags: str = DEFAULT_SCALE_FLAGS,
     output_fps: Fraction | None = DEFAULT_OUTPUT_FPS,
@@ -283,12 +344,13 @@ def build_ffmpeg_scale_command(
 
     target_width = even(target_width)
     target_height = even(target_height)
+    fps_filter_target = effective_output_fps(source.fps, output_fps)
     scale_filter = ffmpeg_scale_filter(
         mode,
         target_width,
         target_height,
         scale_flags=scale_flags,
-        output_fps=output_fps,
+        output_fps=fps_filter_target,
         fps_method=fps_method,
     )
 
@@ -300,12 +362,13 @@ def build_ffmpeg_scale_command(
         "-vf",
         scale_filter,
         *ffmpeg_output_fps_args(output_fps),
-        "-c:v",
-        video_codec,
-        "-crf",
-        str(crf),
-        "-preset",
-        preset,
+        *ffmpeg_quality_args(
+            video_codec=video_codec,
+            crf=crf,
+            preset=preset,
+            pixel_format=pixel_format,
+            source=source,
+        ),
         "-c:a",
         audio,
         str(output_path),
@@ -328,6 +391,7 @@ def scale_with_ffmpeg(
             video_codec=str(kwargs.get("video_codec", "libx264")),
             crf=int(kwargs.get("crf", DEFAULT_CRF)),
             preset=str(kwargs.get("preset", DEFAULT_PRESET)),
+            pixel_format=kwargs.get("pixel_format", DEFAULT_PIXEL_FORMAT),
             audio=str(kwargs.get("audio", "copy")),
             ffmpeg=str(kwargs.get("ffmpeg", "ffmpeg")),
             ffprobe=str(kwargs.get("ffprobe", "ffprobe")),
@@ -359,6 +423,7 @@ def upscale_with_fx(
     video_codec: str = "libx264",
     crf: int = DEFAULT_CRF,
     preset: str = DEFAULT_PRESET,
+    pixel_format: str | None = DEFAULT_PIXEL_FORMAT,
     audio: str = "copy",
     scale_flags: str = DEFAULT_SCALE_FLAGS,
     output_fps: Fraction | None = DEFAULT_OUTPUT_FPS,
@@ -396,6 +461,7 @@ def upscale_with_fx(
             output_path,
             fx_input,
             fx_output,
+            source,
             target_width,
             target_height,
             mode,
@@ -404,6 +470,7 @@ def upscale_with_fx(
             video_codec,
             crf,
             preset,
+            pixel_format,
             audio,
             scale_flags,
             output_fps,
@@ -427,12 +494,13 @@ def upscale_with_fx(
             cwd=temp_root,
         )
         fx_output = detect_fx_output(temp_root, before, fx_input)
+        fps_filter_target = effective_output_fps(source.fps, output_fps)
         scale_filter = ffmpeg_scale_filter(
             mode,
             target_width,
             target_height,
             scale_flags=scale_flags,
-            output_fps=output_fps,
+            output_fps=fps_filter_target,
             fps_method=fps_method,
         )
         run_command([
@@ -449,12 +517,13 @@ def upscale_with_fx(
             "-vf",
             scale_filter,
             *ffmpeg_output_fps_args(output_fps),
-            "-c:v",
-            video_codec,
-            "-crf",
-            str(crf),
-            "-preset",
-            preset,
+            *ffmpeg_quality_args(
+                video_codec=video_codec,
+                crf=crf,
+                preset=preset,
+                pixel_format=pixel_format,
+                source=source,
+            ),
             "-c:a",
             audio,
             "-shortest",
@@ -467,6 +536,7 @@ def upscale_with_fx(
             video_codec=video_codec,
             crf=crf,
             preset=preset,
+            pixel_format=pixel_format,
             audio=audio,
             ffmpeg=ffmpeg,
             ffprobe=ffprobe,
@@ -489,6 +559,7 @@ def upscale_with_realesrgan(
     video_codec: str = "libx264",
     crf: int = DEFAULT_CRF,
     preset: str = DEFAULT_PRESET,
+    pixel_format: str | None = DEFAULT_PIXEL_FORMAT,
     audio: str = "copy",
     scale_flags: str = DEFAULT_SCALE_FLAGS,
     output_fps: Fraction | None = DEFAULT_OUTPUT_FPS,
@@ -535,6 +606,7 @@ def upscale_with_realesrgan(
             video_codec,
             crf,
             preset,
+            pixel_format,
             audio,
             scale_flags,
             output_fps,
@@ -562,12 +634,13 @@ def upscale_with_realesrgan(
         )
         ensure_frames_exist(upscaled_dir)
 
+        fps_filter_target = effective_output_fps(source.fps, output_fps)
         scale_filter = ffmpeg_scale_filter(
             mode,
             target_width,
             target_height,
             scale_flags=scale_flags,
-            output_fps=output_fps,
+            output_fps=fps_filter_target,
             fps_method=fps_method,
         )
         run_command(build_encode_frames_command(
@@ -580,6 +653,7 @@ def upscale_with_realesrgan(
             video_codec=video_codec,
             crf=crf,
             preset=preset,
+            pixel_format=pixel_format,
             audio=audio,
             ffmpeg=ffmpeg,
         ))
@@ -590,6 +664,7 @@ def upscale_with_realesrgan(
             video_codec=video_codec,
             crf=crf,
             preset=preset,
+            pixel_format=pixel_format,
             audio=audio,
             ffmpeg=ffmpeg,
             ffprobe=ffprobe,
@@ -653,6 +728,7 @@ def build_encode_frames_command(
     video_codec: str,
     crf: int,
     preset: str,
+    pixel_format: str | None,
     audio: str,
     ffmpeg: str,
 ) -> list[str]:
@@ -672,12 +748,13 @@ def build_encode_frames_command(
         "-vf",
         scale_filter,
         *ffmpeg_output_fps_args(output_fps),
-        "-c:v",
-        video_codec,
-        "-crf",
-        str(crf),
-        "-preset",
-        preset,
+        *ffmpeg_quality_args(
+            video_codec=video_codec,
+            crf=crf,
+            preset=preset,
+            pixel_format=pixel_format,
+            source=source,
+        ),
         "-c:a",
         audio,
         "-shortest",
@@ -739,6 +816,7 @@ def _print_fx_plan(
     output_path: Path,
     fx_input: Path,
     fx_output: Path,
+    source: VideoInfo,
     target_width: int,
     target_height: int,
     mode: str,
@@ -747,18 +825,20 @@ def _print_fx_plan(
     video_codec: str,
     crf: int,
     preset: str,
+    pixel_format: str | None,
     audio: str,
     scale_flags: str,
     output_fps: Fraction | None,
     fps_method: str,
     ffmpeg: str,
 ) -> None:
+    fps_filter_target = effective_output_fps(source.fps, output_fps)
     scale_filter = ffmpeg_scale_filter(
         mode,
         target_width,
         target_height,
         scale_flags=scale_flags,
-        output_fps=output_fps,
+        output_fps=fps_filter_target,
         fps_method=fps_method,
     )
     commands = [
@@ -788,12 +868,13 @@ def _print_fx_plan(
             "-vf",
             scale_filter,
             *ffmpeg_output_fps_args(output_fps),
-            "-c:v",
-            video_codec,
-            "-crf",
-            str(crf),
-            "-preset",
-            preset,
+            *ffmpeg_quality_args(
+                video_codec=video_codec,
+                crf=crf,
+                preset=preset,
+                pixel_format=pixel_format,
+                source=source,
+            ),
             "-c:a",
             audio,
             "-shortest",
@@ -820,18 +901,20 @@ def _print_realesrgan_plan(
     video_codec: str,
     crf: int,
     preset: str,
+    pixel_format: str | None,
     audio: str,
     scale_flags: str,
     output_fps: Fraction | None,
     fps_method: str,
     ffmpeg: str,
 ) -> None:
+    fps_filter_target = effective_output_fps(source.fps, output_fps)
     scale_filter = ffmpeg_scale_filter(
         mode,
         target_width,
         target_height,
         scale_flags=scale_flags,
-        output_fps=output_fps,
+        output_fps=fps_filter_target,
         fps_method=fps_method,
     )
     commands = [
@@ -855,6 +938,7 @@ def _print_realesrgan_plan(
             video_codec=video_codec,
             crf=crf,
             preset=preset,
+            pixel_format=pixel_format,
             audio=audio,
             ffmpeg=ffmpeg,
         ),
@@ -877,6 +961,11 @@ def add_common_scale_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--video-codec", default="libx264")
     parser.add_argument("--crf", type=int, default=DEFAULT_CRF)
     parser.add_argument("--preset", default=DEFAULT_PRESET)
+    parser.add_argument(
+        "--pixel-format",
+        default=DEFAULT_PIXEL_FORMAT,
+        help="Output pixel format. Use an empty string to let ffmpeg choose.",
+    )
     parser.add_argument("--audio", default="copy", help="Audio codec setting passed to ffmpeg, usually copy or aac.")
     parser.add_argument(
         "--scale-flags",
