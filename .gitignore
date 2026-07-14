@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Virtualenv
+.Pipfile.lock
+
+# Pytest
+.cache/
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+.coverage.*.sqlite
+nosetests.xml
+coverage.xml
+*,cover
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+
+# Files created by build tools or user scripts
+*.tmp
+*.swp
+*~
+
+data/
