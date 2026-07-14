@@ -16,7 +16,7 @@ NAME="$1"
 OUTPUT_DIR="${OUTPUT_DIR:-${HOME}/work/c-work/8007-output}"
 TARGET_HEIGHT="${TARGET_HEIGHT:-2160}"
 INPUT_FILE="${OUTPUT_DIR}/${NAME}.mov"
-OUTPUT_FILE="${OUTPUT_DIR}/${NAME}_${TARGET_HEIGHT}p.mov"
+OUTPUT_FILE="${OUTPUT_DIR}/${NAME}-${TARGET_HEIGHT}p.mov"
 
 if [[ ! -f "$INPUT_FILE" ]]; then
     echo "Input video does not exist: $INPUT_FILE" >&2
