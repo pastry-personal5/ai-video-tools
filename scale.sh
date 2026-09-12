@@ -8,13 +8,14 @@ fi
 
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <NAME>" >&2
-    echo "Environment: OUTPUT_DIR, TARGET_HEIGHT, DEBUG=1" >&2
+    echo "Environment: OUTPUT_DIR, TARGET_HEIGHT, TARGET_FPS, DEBUG=1" >&2
     exit 1
 fi
 
 NAME="$1"
 OUTPUT_DIR="${OUTPUT_DIR:-${HOME}/work/c-work/8007-output}"
 TARGET_HEIGHT="${TARGET_HEIGHT:-2160}"
+TARGET_FPS="${TARGET_FPS:-30}"
 INPUT_FILE="${OUTPUT_DIR}/${NAME}.mov"
 OUTPUT_FILE="${OUTPUT_DIR}/${NAME}-${TARGET_HEIGHT}p.mov"
 
@@ -26,4 +27,5 @@ fi
 uv run upscale_video_fx.py \
     "$INPUT_FILE" \
     "$OUTPUT_FILE" \
-    --height "$TARGET_HEIGHT"
+    --height "$TARGET_HEIGHT" \
+    --fps "$TARGET_FPS"

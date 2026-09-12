@@ -33,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--realesrgan-scale",
         type=int,
         choices=(2, 3, 4),
-        help="Intermediate Real-ESRGAN scale. Defaults to the smallest supported scale that covers the target.",
+        help="Intermediate Real-ESRGAN scale. Defaults to 4x for maximum detail before final resize.",
     )
     parser.add_argument(
         "--keep-temp",

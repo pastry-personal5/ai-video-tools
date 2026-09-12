@@ -92,7 +92,7 @@ def build_concat_reencode_command(
     video_codec: str = "libx264",
     crf: int = DEFAULT_CRF,
     preset: str = DEFAULT_PRESET,
-    audio_codec: str = "aac",
+    audio_codec: str = "alac",
     include_audio: bool = True,
     ffmpeg: str = "ffmpeg",
     ffprobe: str = "ffprobe",
@@ -141,7 +141,7 @@ def concat_videos(
     video_codec: str = "libx264",
     crf: int = DEFAULT_CRF,
     preset: str = DEFAULT_PRESET,
-    audio_codec: str = "aac",
+    audio_codec: str = "alac",
     include_audio: bool = True,
     ffmpeg: str = "ffmpeg",
     ffprobe: str = "ffprobe",
@@ -226,9 +226,9 @@ def add_concat_args(parser: argparse.ArgumentParser) -> None:
         help="copy preserves original encoded streams; reencode handles mismatched inputs.",
     )
     parser.add_argument("--video-codec", default="libx264")
-    parser.add_argument("--crf", type=int, default=DEFAULT_CRF)
-    parser.add_argument("--preset", default=DEFAULT_PRESET)
-    parser.add_argument("--audio-codec", default="aac")
+    parser.add_argument("--crf", type=int, default=DEFAULT_CRF, help="Constant Rate Factor; lower values use more bitrate.")
+    parser.add_argument("--preset", default=DEFAULT_PRESET, help="Encoder preset.")
+    parser.add_argument("--audio-codec", default="alac", help="Audio codec for reencode mode. Defaults to lossless ALAC.")
     parser.add_argument("--no-audio", action="store_true", help="Drop audio in reencode mode.")
     parser.add_argument("--reverse", action="store_true", help="Concatenate the input file paths in reverse order.")
     parser.add_argument("--ffmpeg", default="ffmpeg")

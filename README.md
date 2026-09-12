@@ -1,5 +1,9 @@
 # AI Video Tools
 
+> [!IMPORTANT]
+> **Project status: INACTIVE and ARCHIVED as of 2026-09-13.**
+> This repository is retained for reference only. It is no longer maintained, and no updates, fixes, or support are planned.
+
 Small command-line tools and notes for working with AI-generated video assets. The current scripts focus on resizing, upscaling, frame-rate conversion, and concatenating clips with predictable `ffmpeg`-based workflows.
 
 ## Code Provenance
@@ -55,7 +59,7 @@ python scale_video_ffmpeg.py input.mp4 output.mp4 --size 1920x1080 --mode fill
 
 The default `exact` mode stretches to the target size. `fit` pads inside the target canvas, and `fill` crops after preserving aspect ratio.
 
-The output frame rate defaults to 30fps. By default the scripts use `ffmpeg` motion interpolation through `minterpolate` instead of simply duplicating frames:
+The output frame rate defaults to the source frame rate. When you request a different rate, the scripts use `ffmpeg` motion interpolation through `minterpolate` instead of simply duplicating frames:
 
 ```sh
 python scale_video_ffmpeg.py input-16fps.mp4 output-30fps.mp4 --height 1080 --fps 30
@@ -63,9 +67,9 @@ python scale_video_ffmpeg.py input-16fps.mp4 output-30fps.mp4 --height 1080 --fp
 
 Use `--fps-method duplicate` if you want faster conversion with repeated/dropped frames instead of interpolated motion.
 
-Default encode settings now prioritize final visual quality over file size: `libx264`, CRF 10, the `veryslow` preset, copied audio, `yuv444p` output, and high-quality chroma-aware `ffmpeg` scaling flags. Increase `--crf` for smaller files, lower it for even higher quality, pass `--pixel-format yuv420p` for broader playback compatibility, or pass `--scale-flags ""` to use `ffmpeg` scaler defaults.
+Default encode settings now prioritize final visual quality over file size: `libx264`, CRF 0 lossless video, the `veryslow` preset, copied audio, `yuv444p` output, and high-quality chroma-aware `ffmpeg` scaling flags. Increase `--crf` for smaller files, pass `--pixel-format yuv420p` for broader playback compatibility, or pass `--scale-flags ""` to use `ffmpeg` scaler defaults.
 
-The output frame rate still defaults to 30fps, but frame interpolation is only applied when the source frame rate differs from the requested output. This avoids an extra motion-estimation pass on videos that are already 30fps.
+Frame interpolation is only applied when you pass `--fps` and the source frame rate differs from the requested output. This avoids an extra motion-estimation pass on videos that do not need frame-rate conversion.
 
 Preview the generated command without writing output:
 
@@ -101,7 +105,7 @@ Upscale video with Real-ESRGAN, then resize/remux with `ffmpeg`:
 python upscale_video_realesrgan.py input.mp4 output.mp4 --height 1080
 ```
 
-The Real-ESRGAN workflow extracts PNG frames to a temporary directory, runs Real-ESRGAN on those frames, then encodes the finished video with the same output sizing, frame-rate, audio, and codec options used by the other scaling scripts.
+The Real-ESRGAN workflow extracts PNG frames to a temporary directory, runs Real-ESRGAN on those frames, then encodes the finished video with the same output sizing, frame-rate, audio, and codec options used by the other scaling scripts. By default it uses a 4x intermediate upscaled frame set and lets the final high-quality `ffmpeg` pass resize to the requested dimensions.
 
 Specify a custom model folder when your model files are not in the executable's default model directory:
 
@@ -153,14 +157,14 @@ Then concatenate the list:
 uv run concatenate_videos.py --inputs-file list.txt --reverse -o combined.mov
 ```
 
-The default `copy` method preserves original encoded streams. If the inputs are ProRes `.mov` files, use a `.mov` output for stream-copy concatenation. Use `--method reencode` when you specifically need an H.264 `.mp4`; it is more compatible but creates a new encode using the same CRF 10 and `veryslow` preset defaults as the scaling tools.
+The default `copy` method preserves original encoded streams. If the inputs are ProRes `.mov` files, use a `.mov` output for stream-copy concatenation. Use `--method reencode` when you specifically need a freshly encoded output; it creates lossless H.264 video by default and uses lossless ALAC audio unless you pass another `--audio-codec`.
 
 ## Common Options
 
 - `--size WIDTHxHEIGHT`: exact target dimensions.
 - `--width WIDTH` or `--height HEIGHT`: preserve source aspect ratio.
 - `--mode exact|fit|fill`: stretch, pad, or crop to the target.
-- `--fps FPS`: output frame rate, defaulting to 30.
+- `--fps FPS`: output frame rate. Omit it to preserve the source frame rate.
 - `--fps-method mci|duplicate`: motion interpolation or repeated/dropped frames.
 - `--pixel-format PIXEL_FORMAT`: output pixel format, defaulting to `yuv444p` for higher chroma fidelity.
 - `--video-codec`, `--crf`, `--preset`: final video encode settings.

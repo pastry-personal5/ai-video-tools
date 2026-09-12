@@ -23,11 +23,11 @@ class VideoInfo:
     color_primaries: str | None = None
 
 
-DEFAULT_CRF = 10
+DEFAULT_CRF = 3
 DEFAULT_PRESET = "veryslow"
 DEFAULT_PIXEL_FORMAT = "yuv444p"
 DEFAULT_SCALE_FLAGS = "lanczos+accurate_rnd+full_chroma_inp+full_chroma_int"
-DEFAULT_OUTPUT_FPS = Fraction(30, 1)
+DEFAULT_OUTPUT_FPS: Fraction | None = None
 DEFAULT_FPS_METHOD = "mci"
 
 
@@ -398,17 +398,6 @@ def scale_with_ffmpeg(
         )
 
 
-def fx_codec_for_video_codec(video_codec: str) -> str:
-    normalized = video_codec.lower()
-    if normalized in {"h264", "avc1", "libx264"}:
-        return "h264"
-    if normalized in {"hevc", "h265", "libx265"}:
-        return "hevc"
-    if normalized in {"prores", "prores_ks", "prores_videotoolbox"}:
-        return "prores"
-    return "hevc"
-
-
 def upscale_with_fx(
     input_path: Path,
     output_path: Path,
@@ -448,7 +437,7 @@ def upscale_with_fx(
 
     target_width = even(target_width)
     target_height = even(target_height)
-    fx_codec = fx_codec or fx_codec_for_video_codec(video_codec)
+    fx_codec = fx_codec or "prores"
     if fx_codec not in {"hevc", "prores", "h264"}:
         raise ValueError("fx-upscale codec must be hevc, prores, or h264")
 
@@ -673,10 +662,6 @@ def upscale_with_realesrgan(
 
 def realesrgan_scale_for_target(source: VideoInfo, target_width: int, target_height: int) -> int:
     required = max(target_width / source.width, target_height / source.height)
-    if required <= 2:
-        return 2
-    if required <= 3:
-        return 3
     if required <= 4:
         return 4
     raise ValueError("Real-ESRGAN scale only supports targets up to 4x the source; pass a smaller target")
@@ -959,8 +944,8 @@ def add_common_scale_args(parser: argparse.ArgumentParser) -> None:
         help="exact stretches to target, fit pads, fill crops.",
     )
     parser.add_argument("--video-codec", default="libx264")
-    parser.add_argument("--crf", type=int, default=DEFAULT_CRF)
-    parser.add_argument("--preset", default=DEFAULT_PRESET)
+    parser.add_argument("--crf", type=int, default=DEFAULT_CRF, help="Constant Rate Factor; lower values use more bitrate.")
+    parser.add_argument("--preset", default=DEFAULT_PRESET, help="Encoder preset.")
     parser.add_argument(
         "--pixel-format",
         default=DEFAULT_PIXEL_FORMAT,
@@ -977,7 +962,7 @@ def add_common_scale_args(parser: argparse.ArgumentParser) -> None:
         dest="output_fps",
         type=parse_fps,
         default=DEFAULT_OUTPUT_FPS,
-        help="Output frame rate. Use 30 to convert 16fps inputs to 30fps outputs.",
+        help="Output frame rate. By default, preserve the source frame rate. Use 30 to convert 16fps inputs to 30fps outputs.",
     )
     parser.add_argument(
         "--fps-method",

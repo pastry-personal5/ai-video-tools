@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--fx-codec",
         choices=("hevc", "prores", "h264"),
-        help="Intermediate codec passed to fx-upscale. Defaults from --video-codec when possible.",
+        help="Intermediate codec passed to fx-upscale. Defaults to ProRes for higher quality.",
     )
     parser.add_argument(
         "--keep-temp",
